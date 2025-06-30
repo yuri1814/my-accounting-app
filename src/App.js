@@ -1,15 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, addDoc, onSnapshot, query, doc, deleteDoc, updateDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
-import {
-  getAuth,
-  onAuthStateChanged,
-  signInAnonymously,
-  signInWithPopup,
-  signOut,
-  GoogleAuthProvider,
-} from "firebase/auth";
-import { Plus, X, TrendingUp, Landmark, CreditCard, Wallet, MoreHorizontal, Repeat, ArrowDown, ArrowUp, Smartphone, Shuffle, AlertTriangle, PieChart as PieChartIcon, BarChart2, LogIn, LogOut } from 'lucide-react';
+import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { Plus, Trash2, X, TrendingUp, Landmark, CreditCard, Wallet, MoreHorizontal, Home, Repeat, ArrowDown, ArrowUp, Smartphone, Shuffle, AlertTriangle, PieChart as PieChartIcon, BarChart2, LogIn, LogOut } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -78,6 +71,7 @@ const accountTypes = {
   '電子支付': { icon: <Smartphone className="h-5 w-5" /> },
   '其他資產': { icon: <MoreHorizontal className="h-5 w-5" /> },
 };
+
 
 // --- Helper & Item Components ---
 const InputField = ({ label, as = 'input', children, ...props }) => {
@@ -693,9 +687,9 @@ const Header = ({ user, onLogin, onLogout, totalAssets, activePage }) => {
             <div className="flex justify-between items-center mb-4">
                  <h1 className="text-xl font-bold tracking-wide">{titles[activePage]}</h1>
                  <div>
-                    {user && !user.isAnonymous ? (
+                    {user ? (
                         <div className="flex items-center gap-2">
-                            <img src={user.photoURL} alt={user.displayName} className="w-6 h-6 rounded-full" />
+                             <img src={user.photoURL} alt={user.displayName} className="w-6 h-6 rounded-full" />
                             <span className="text-xs font-medium hidden sm:inline">{user.displayName || '使用者'}</span>
                             <button onClick={onLogout} className="flex items-center gap-1.5 text-xs bg-white/20 hover:bg-white/30 px-2 py-1 rounded-full transition-colors">
                                 <LogOut size={14} />
@@ -721,7 +715,30 @@ const Header = ({ user, onLogin, onLogout, totalAssets, activePage }) => {
         </header>
     );
 }
-const BottomNav = ({ activePage, setActivePage }) => { /* Component content */ };
+const BottomNav = ({ activePage, setActivePage }) => {
+  const navItems = [
+    { id: 'home', icon: <Home />, label: '總覽' },
+    { id: 'accounts', icon: <Landmark />, label: '帳戶' },
+    { id: 'recurring', icon: <Repeat />, label: '定期' },
+  ];
+  return (
+    <nav className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white border-t border-gray-200 flex justify-around p-2 z-20">
+      {navItems.map(item => (
+        <button
+          key={item.id}
+          onClick={() => setActivePage(item.id)}
+          className={`flex flex-col items-center justify-center w-20 h-16 rounded-lg transition-colors duration-200 ${
+            activePage === item.id ? 'text-blue-600 bg-blue-50' : 'text-gray-500 hover:bg-gray-100'
+          }`}
+        >
+          {React.cloneElement(item.icon, { className: 'h-6 w-6 mb-1' })}
+          <span className="text-xs font-medium">{item.label}</span>
+        </button>
+      ))}
+    </nav>
+  );
+};
+
 
 // --- Main App Component ---
 export default function App() {
@@ -745,12 +762,7 @@ export default function App() {
       return;
     }
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if(currentUser) {
-        setUser(currentUser);
-      } else {
-        // If no user, sign in anonymously to get a UID for local storage
-        await signInAnonymously(auth);
-      }
+      setUser(currentUser);
       setIsLoading(false);
     });
     return () => unsubscribe();
@@ -768,7 +780,7 @@ export default function App() {
   const handleLogout = async () => {
     try {
       await signOut(auth);
-      // After signing out, onAuthStateChanged will trigger a new anonymous user
+      setUser(null); // Clear user state immediately
     } catch (error) {
       console.error("登出失敗:", error);
     }
@@ -893,12 +905,12 @@ export default function App() {
   };
 
   const renderPage = () => {
-    if (!user) return <LoadingSpinner />;
+    if (!user) return <HomePage expenses={[]} incomes={[]} accounts={[]} onEdit={() => {}} />;
     switch (activePage) {
       case 'home':
         return <HomePage expenses={expenses} incomes={incomes} accounts={accounts} onEdit={openEditModal} />;
       case 'accounts':
-        return <AccountsPage accounts={accounts} balances={accountBalances} onDelete={(id) => setItemToDelete({ collectionName: 'accounts', docId: id, message: '刪除帳戶將會一併刪除其所有交易紀錄，確定嗎？' })} onEdit={(item) => openEditModal(item, 'editAccount')} />;
+        return <AccountsPage accounts={accounts} balances={accountBalances} onDelete={(id) => setItemToDelete({ collectionName: 'accounts', docId: id, message: '刪除帳戶將會影響相關交易，確定嗎？' })} onEdit={(item) => openEditModal(item, 'editAccount')} />;
       case 'recurring':
         return <RecurringPage recurring={recurring} installments={installments} onAddExpense={handleAddExpense} onDelete={(type, id) => setItemToDelete({ collectionName: type, docId: id, message: '確定要刪除這個項目嗎？' })} onEdit={openEditModal} />;
       default:
@@ -953,7 +965,7 @@ export default function App() {
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
                   onClick={() => {
-                      if (!user || user.isAnonymous) {
+                      if (!user) {
                           handleGoogleLogin();
                           return;
                       }
