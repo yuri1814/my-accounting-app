@@ -676,8 +676,112 @@ const HomePage = ({ expenses, incomes, accounts, onEdit }) => {
       </div>
     );
 };
-const AccountsPage = ({ accounts, balances, onDelete, onEdit }) => { /* Component content */ };
-const RecurringPage = ({ recurring, installments, onAddExpense, onDelete, onEdit }) => { /* Component content */ };
+
+const AccountsPage = ({ accounts, balances, onDelete, onEdit }) => {
+    return(
+        <div>
+            {accounts.length === 0 ? (
+                <EmptyState icon={<Landmark />} title="尚未建立任何帳戶" message="點擊右下角的 '+' 按鈕來新增第一個帳戶。" />
+            ) : (
+                <ul className="space-y-3">
+                    {accounts.map(acc => {
+                        const balance = balances.get(acc.id) || 0;
+                        return (
+                            <li key={acc.id} onClick={() => onEdit(acc)} className="flex items-center p-4 bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer">
+                               <div className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-gray-100 text-gray-600">
+                                    {accountTypes[acc.type]?.icon || <MoreHorizontal />}
+                               </div>
+                               <div className="flex-grow ml-4">
+                                    <p className="font-medium text-gray-800">{acc.name}</p>
+                                    <p className="text-xs text-gray-500">{acc.type}</p>
+                               </div>
+                               <div className="flex items-center">
+                                   <p className={`text-lg font-semibold ${balance < 0 ? 'text-red-500' : 'text-gray-800'}`}>
+                                       $ {balance.toLocaleString()}
+                                   </p>
+                                   <button onClick={(e) => { e.stopPropagation(); onDelete(acc.id); }} className="ml-4 text-gray-400 hover:text-red-500 p-2 rounded-full hover:bg-red-50"><Trash2 className="h-4 w-4" /></button>
+                               </div>
+                            </li>
+                        )
+                    })}
+                </ul>
+            )}
+        </div>
+    );
+};
+
+const RecurringPage = ({ recurring, installments, onAddExpense, onDelete, onEdit }) => {
+    const [view, setView] = useState('recurring');
+
+    const handleLogRecurring = (item) => {
+        onAddExpense({
+            description: item.description, amount: item.amount, category: '帳單',
+            accountId: item.paymentAccountId, recurringId: item.id
+        });
+    }
+
+    const handleLogInstallment = (item) => {
+        onAddExpense({
+            description: `${item.description} (第 ${ (item.paidInstallments || 0) + 1 } 期)`, amount: item.monthlyPayment,
+            category: '帳單', accountId: item.paymentAccountId, installmentId: item.id
+        });
+    }
+
+    return (
+        <div>
+            <div className="flex justify-center bg-gray-100 rounded-lg p-1 mb-5">
+                <button onClick={() => setView('recurring')} className={`w-1/2 py-2 text-sm font-semibold rounded-md transition-colors ${view === 'recurring' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600'}`}>定期支出</button>
+                <button onClick={() => setView('installments')} className={`w-1/2 py-2 text-sm font-semibold rounded-md transition-colors ${view === 'installments' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600'}`}>分期付款</button>
+            </div>
+
+            {view === 'recurring' && (
+                <div id="recurring-section">
+                     {recurring.length === 0 ? <EmptyState icon={<Repeat />} title="尚無定期支出" message="新增後可快速記錄每月固定花費。" /> : (
+                        <ul className="space-y-3">
+                            {recurring.map(item => (
+                                <li key={item.id} className="p-3 bg-white rounded-lg flex items-center justify-between shadow-sm">
+                                    <div onClick={() => onEdit(item, 'editRecurring')} className="flex-grow cursor-pointer">
+                                        <p className="font-medium text-gray-800">{item.description}</p>
+                                        <p className="text-xs text-gray-500">每月 {item.dayOfMonth} 日・$ {item.amount.toLocaleString()}</p>
+                                    </div>
+                                    <button onClick={() => handleLogRecurring(item)} className="ml-2 bg-blue-500 text-white text-xs font-bold py-1 px-3 rounded-full hover:bg-blue-600 flex-shrink-0">記錄本次</button>
+                                </li>
+                            ))}
+                        </ul>
+                     )}
+                </div>
+            )}
+
+            {view === 'installments' && (
+                <div id="installments-section">
+                    {installments.length === 0 ? <EmptyState icon={<TrendingUp />} title="尚無分期付款" message="新增後可輕鬆追蹤還款進度。" /> : (
+                        <ul className="space-y-3">
+                            {installments.map(item => {
+                                const isPaidOff = (item.paidInstallments || 0) >= item.totalInstallments;
+                                return (
+                                <li key={item.id} className={`p-3 rounded-lg flex items-center justify-between shadow-sm ${isPaidOff ? 'bg-green-50' : 'bg-white'}`}>
+                                    <div onClick={() => onEdit(item, 'editInstallment')} className="flex-grow cursor-pointer">
+                                        <p className="font-medium text-gray-800">{item.description}</p>
+                                        <p className="text-xs text-gray-500">{item.platform}・$ {item.monthlyPayment.toLocaleString()}/月</p>
+                                        <div className="w-full bg-gray-200 rounded-full h-1.5 mt-2">
+                                            <div className="bg-blue-600 h-1.5 rounded-full" style={{width: `${((item.paidInstallments || 0)/item.totalInstallments)*100}%`}}></div>
+                                        </div>
+                                        <p className="text-xs text-gray-500 mt-1">進度: {item.paidInstallments || 0} / {item.totalInstallments}</p>
+                                    </div>
+                                    {!isPaidOff ? (
+                                        <button onClick={() => handleLogInstallment(item)} className="ml-2 bg-green-500 text-white text-xs font-bold py-1 px-3 rounded-full hover:bg-green-600 flex-shrink-0">繳本期</button>
+                                    ) : (
+                                        <span className="text-green-600 text-xs font-bold ml-2 flex-shrink-0">已付清</span>
+                                    )}
+                                </li>
+                            )})}
+                        </ul>
+                     )}
+                </div>
+            )}
+        </div>
+    );
+}
 
 // --- Nav & Header Components ---
 const Header = ({ user, onLogin, onLogout, totalAssets, activePage }) => {
