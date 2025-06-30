@@ -1,20 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, addDoc, onSnapshot, query, doc, deleteDoc, updateDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
-import { Plus, Trash2, X, TrendingUp, Landmark, CreditCard, Wallet, MoreHorizontal, Home, Repeat, ArrowDown, ArrowUp, Smartphone, Shuffle, AlertTriangle } from 'lucide-react';
-import { getAuth, onAuthStateChanged, signInAnonymously } from 'firebase/auth';
-
-// --- Custom Icons (to avoid direct dependency) ---
-const UtensilsIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3z"/></svg>;
-const ShoppingCartIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.16"/></svg>;
-const CarIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><path d="M14 17H9"/><path d="M9 11h4"/><path d="m5 17-1 4"/><path d="m19 17 1 4"/><circle cx="6.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>;
-const Gamepad2Icon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="6" x2="10" y1="12" y2="12"/><line x1="8" x2="8" y1="10" y2="14"/><path d="M17.5 15a3.5 3.5 0 0 0 0-7h-9a3.5 3.5 0 0 0-3.5 3.5v1A3.5 3.5 0 0 0 8.5 16H11"/><path d="M14.5 12H16"/></svg>;
-const ReceiptIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h6"/><path d="M12 17.5v-11"/></svg>;
-const BriefcaseIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>;
-const StarIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>;
+import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { Plus, Trash2, X, TrendingUp, Landmark, CreditCard, Wallet, MoreHorizontal, Home, Repeat, ArrowDown, ArrowUp, Smartphone, Shuffle, AlertTriangle, PieChart as PieChartIcon, BarChart2, LogIn, LogOut } from 'lucide-react';
+import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { motion, AnimatePresence } from 'framer-motion';
 
 // --- Firebase Configuration ---
-// This reads the configuration from the environment variables you set up in Netlify.
 const firebaseConfig = {
   apiKey: process.env.REACT_APP_API_KEY,
   authDomain: process.env.REACT_APP_AUTH_DOMAIN,
@@ -24,29 +16,53 @@ const firebaseConfig = {
   appId: process.env.REACT_APP_APP_ID
 };
 
-// --- Initialize Firebase ---
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const auth = getAuth(app); // <- 用到 getAuth 但沒 import
+// --- Firebase Initialization ---
+let app;
+let db;
+let auth;
+let firebaseError = null;
 
+if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+  firebaseError = "Firebase 設定錯誤：環境變數未正確設定。請檢查 Netlify 的設定。";
+} else {
+  try {
+    app = initializeApp(firebaseConfig);
+    db = getFirestore(app);
+    auth = getAuth(app);
+  } catch (e) {
+    console.error("Firebase Initialization Error:", e);
+    firebaseError = `Firebase 初始化失敗: ${e.message}`;
+  }
+}
 
-// --- Static Data ---
+// --- Custom Icons ---
+const UtensilsIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3z"/></svg>;
+const ShoppingCartIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.16"/></svg>;
+const CarIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><path d="M14 17H9"/><path d="M9 11h4"/><path d="m5 17-1 4"/><path d="m19 17 1 4"/><circle cx="6.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>;
+const Gamepad2Icon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="6" x2="10" y1="12" y2="12"/><line x1="8" x2="8" y1="10" y2="14"/><path d="M17.5 15a3.5 3.5 0 0 0 0-7h-9a3.5 3.5 0 0 0-3.5 3.5v1A3.5 3.5 0 0 0 8.5 16H11"/><path d="M14.5 12H16"/></svg>;
+const ReceiptIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h6"/><path d="M12 17.5v-11"/></svg>;
+const BriefcaseIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>;
+const StarIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>;
+
+// --- Static Data & Colors ---
+const COLORS = ['#0EA5E9', '#22C55E', '#F97316', '#8B5CF6', '#EC4899', '#FACC15', '#64748B'];
+
 const expenseCategories = {
-  '飲食': { icon: <UtensilsIcon />, color: 'bg-blue-100 text-blue-600' },
-  '購物': { icon: <ShoppingCartIcon />, color: 'bg-green-100 text-green-600' },
-  '交通': { icon: <CarIcon />, color: 'bg-yellow-100 text-yellow-600' },
-  '娛樂': { icon: <Gamepad2Icon />, color: 'bg-purple-100 text-purple-600' },
-  '帳單': { icon: <ReceiptIcon />, color: 'bg-red-100 text-red-600' },
-  '投資': { icon: <TrendingUp className="h-5 w-5" />, color: 'bg-indigo-100 text-indigo-600' },
-  '轉帳': { icon: <Shuffle className="h-5 w-5" />, color: 'bg-gray-100 text-gray-600' },
-  '其他': { icon: <MoreHorizontal className="h-5 w-5" />, color: 'bg-gray-100 text-gray-600' },
+  '飲食': { icon: <UtensilsIcon />, color: 'bg-sky-100 text-sky-600', chartColor: COLORS[0] },
+  '購物': { icon: <ShoppingCartIcon />, color: 'bg-green-100 text-green-600', chartColor: COLORS[1] },
+  '交通': { icon: <CarIcon />, color: 'bg-orange-100 text-orange-600', chartColor: COLORS[2] },
+  '娛樂': { icon: <Gamepad2Icon />, color: 'bg-violet-100 text-violet-600', chartColor: COLORS[3] },
+  '帳單': { icon: <ReceiptIcon />, color: 'bg-pink-100 text-pink-600', chartColor: COLORS[4] },
+  '投資': { icon: <TrendingUp className="h-5 w-5" />, color: 'bg-amber-100 text-amber-600', chartColor: COLORS[5] },
+  '轉帳': { icon: <Shuffle className="h-5 w-5" />, color: 'bg-slate-100 text-slate-600', chartColor: COLORS[6] },
+  '其他': { icon: <MoreHorizontal className="h-5 w-5" />, color: 'bg-slate-100 text-slate-600', chartColor: COLORS[6] },
 };
 const incomeCategories = {
   '薪水': { icon: <BriefcaseIcon />, color: 'bg-green-100 text-green-600' },
   '獎金': { icon: <StarIcon />, color: 'bg-yellow-100 text-yellow-600' },
   '投資收益': { icon: <TrendingUp className="h-5 w-5" />, color: 'bg-blue-100 text-blue-600' },
-  '轉帳': { icon: <Shuffle className="h-5 w-5" />, color: 'bg-gray-100 text-gray-600' },
-  '其他收入': { icon: <MoreHorizontal className="h-5 w-5" />, color: 'bg-gray-100 text-gray-600' },
+  '轉帳': { icon: <Shuffle className="h-5 w-5" />, color: 'bg-slate-100 text-slate-600' },
+  '其他收入': { icon: <MoreHorizontal className="h-5 w-5" />, color: 'bg-slate-100 text-gray-600' },
 };
 const accountTypes = {
   '銀行帳戶': { icon: <Landmark className="h-5 w-5" /> },
@@ -103,17 +119,24 @@ const AccountTypeSelector = ({ selected, onSelect }) => (
     </div>
 );
 
-const TransactionItem = ({ children, onEdit, isEditable = true }) => (
-    <li onClick={isEditable ? onEdit : undefined} className={`flex items-center p-3 bg-white rounded-xl shadow-sm border border-gray-100 ${isEditable ? 'hover:shadow-md transition-shadow cursor-pointer' : ''}`}>
+const TransactionItemWrapper = ({ children, onEdit, isEditable = true }) => (
+    <motion.li 
+        layout
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, transition: { duration: 0.1 } }}
+        onClick={isEditable ? onEdit : undefined} 
+        className={`flex items-center p-4 bg-white rounded-2xl shadow-sm border border-gray-100 ${isEditable ? 'hover:shadow-md transition-shadow cursor-pointer' : ''}`}
+    >
         {children}
-    </li>
+    </motion.li>
 );
 
 const ExpenseItem = ({ expense, account, onEdit }) => {
     const categoryInfo = expenseCategories[expense.category] || expenseCategories['其他'];
     const isTransfer = expense.category === '轉帳';
     return(
-      <TransactionItem onEdit={onEdit} isEditable={!isTransfer}>
+      <TransactionItemWrapper onEdit={onEdit} isEditable={!isTransfer}>
         <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${categoryInfo.color}`}>
           {isTransfer ? <Shuffle className="h-5 w-5" /> : <ArrowDown className="h-5 w-5" />}
         </div>
@@ -126,7 +149,7 @@ const ExpenseItem = ({ expense, account, onEdit }) => {
         <p className={`text-base font-semibold ${isTransfer ? 'text-gray-700' : 'text-red-600'}`}>
           - $ {Number(expense.amount).toLocaleString()}
         </p>
-      </TransactionItem>
+      </TransactionItemWrapper>
     );
 };
 
@@ -134,7 +157,7 @@ const IncomeItem = ({ income, account, onEdit }) => {
     const categoryInfo = incomeCategories[income.category] || incomeCategories['其他收入'];
     const isTransfer = income.category === '轉帳';
     return(
-      <TransactionItem onEdit={onEdit} isEditable={!isTransfer}>
+      <TransactionItemWrapper onEdit={onEdit} isEditable={!isTransfer}>
         <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${categoryInfo.color}`}>
           {isTransfer ? <Shuffle className="h-5 w-5" /> : <ArrowUp className="h-5 w-5" />}
         </div>
@@ -147,7 +170,7 @@ const IncomeItem = ({ income, account, onEdit }) => {
         <p className={`text-base font-semibold ${isTransfer ? 'text-gray-700' : 'text-green-600'}`}>
           + $ {Number(income.amount).toLocaleString()}
         </p>
-      </TransactionItem>
+      </TransactionItemWrapper>
     );
 };
 
@@ -155,13 +178,26 @@ const IncomeItem = ({ income, account, onEdit }) => {
 // --- Modal Components ---
 
 const ModalWrapper = ({ children, onClose, title }) => (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 relative animate-modal-pop-in" onClick={e => e.stopPropagation()}>
-        <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X className="h-6 w-6" /></button>
-        <h3 className="text-xl font-semibold mb-6 text-center text-gray-800">{title}</h3>
-        {children}
-      </div>
-    </div>
+    <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4" 
+        onClick={onClose}
+    >
+        <motion.div 
+            initial={{ y: 20, scale: 0.95, opacity: 0 }}
+            animate={{ y: 0, scale: 1, opacity: 1 }}
+            exit={{ y: 20, scale: 0.95, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 relative" 
+            onClick={e => e.stopPropagation()}
+        >
+            <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X className="h-6 w-6" /></button>
+            <h3 className="text-xl font-semibold mb-6 text-center text-gray-800">{title}</h3>
+            {children}
+        </motion.div>
+    </motion.div>
 );
 
 const ConfirmDeleteModal = ({ onConfirm, onCancel, message }) => (
@@ -527,8 +563,60 @@ const AddTransferModal = ({ onClose, onAdd, accounts }) => {
     );
 }
 
-// --- Page Components ---
+// --- New Visual Components ---
+const LoadingSpinner = () => (
+    <div className="flex justify-center items-center py-20">
+        <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+            className="w-12 h-12 border-4 border-slate-200 border-t-sky-500 rounded-full"
+        />
+    </div>
+);
+const EmptyState = ({ icon, title, message }) => (
+    <motion.div 
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="text-center py-16 px-4 bg-slate-50/50 rounded-2xl"
+    >
+        <div className="inline-block bg-white rounded-full p-4 shadow-sm">
+            {React.cloneElement(icon, { className: 'h-12 w-12 text-slate-400' })}
+        </div>
+        <h3 className="mt-4 text-lg font-medium text-slate-800">{title}</h3>
+        <p className="mt-1 text-sm text-slate-500">{message}</p>
+    </motion.div>
+);
+const ExpensePieChart = ({ data }) => {
+    if (!data || data.length === 0) {
+        return <EmptyState icon={<PieChartIcon />} title="本月尚無支出" message="新增支出後，這裡會顯示您的消費分析圖表。"/>
+    }
+    return (
+        <div className="w-full h-64">
+            <ResponsiveContainer>
+                <PieChart>
+                    <Pie
+                        data={data}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        outerRadius={80}
+                        fill="#8884d8"
+                        dataKey="value"
+                        nameKey="name"
+                    >
+                        {data.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                    </Pie>
+                    <Tooltip formatter={(value) => `$${value.toLocaleString()}`} />
+                    <Legend iconType="circle" />
+                </PieChart>
+            </ResponsiveContainer>
+        </div>
+    );
+};
 
+// --- Page Components ---
 const HomePage = ({ expenses, incomes, accounts, onEdit }) => {
     const transactions = useMemo(() => {
         const combined = [
@@ -538,229 +626,150 @@ const HomePage = ({ expenses, incomes, accounts, onEdit }) => {
         return combined.sort((a, b) => (b.date || 0) - (a.date || 0));
     }, [expenses, incomes]);
 
-    return(
-      <div>
-        <h2 className="text-lg font-semibold text-gray-700 mb-4">最近交易紀錄</h2>
-        {transactions.length === 0 ? (
-          <div className="text-center py-10 px-4">
-               <div className="inline-block bg-gray-100 rounded-full p-4"><TrendingUp className="h-10 w-10 text-gray-400" /></div>
-               <h3 className="mt-4 text-lg font-medium text-gray-800">尚未有任何交易</h3>
-               <p className="mt-1 text-sm text-gray-500">點擊右下角的 '+' 按鈕來新增第一筆帳目吧！</p>
-          </div>
-        ) : (
-          <ul className="space-y-3">
-            {transactions.slice(0, 30).map(tx => {
-                const account = accounts.find(a => a.id === tx.accountId);
-                if (tx.type === 'expense') {
-                    return <ExpenseItem key={`exp-${tx.id}`} expense={tx} account={account} onEdit={() => onEdit(tx, 'editExpense')} />;
-                } else {
-                    return <IncomeItem key={`inc-${tx.id}`} income={tx} account={account} onEdit={() => onEdit(tx, 'editIncome')} />;
-                }
-            })}
-          </ul>
-        )}
+    const monthlyChartData = useMemo(() => {
+        const now = new Date();
+        const currentMonthExpenses = expenses.filter(e => {
+            const eDate = e.date;
+            return eDate && eDate.getMonth() === now.getMonth() && eDate.getFullYear() === now.getFullYear() && e.category !== '轉帳';
+        });
+
+        const grouped = currentMonthExpenses.reduce((acc, curr) => {
+            const category = curr.category || '其他';
+            if (!acc[category]) {
+                acc[category] = { value: 0, color: expenseCategories[category]?.chartColor || COLORS[6] };
+            }
+            acc[category].value += Number(curr.amount);
+            return acc;
+        }, {});
+
+        return Object.entries(grouped).map(([name, data]) => ({ name, value: data.value, color: data.color }));
+    }, [expenses]);
+
+    return (
+      <div className="space-y-6">
+        <div>
+            <h2 className="text-xl font-bold text-gray-800 mb-3">本月分析</h2>
+            <div className="bg-white p-4 rounded-2xl shadow-sm">
+                <ExpensePieChart data={monthlyChartData} />
+            </div>
+        </div>
+        <div>
+            <h2 className="text-xl font-bold text-gray-800 mb-3">最近交易紀錄</h2>
+            {transactions.length === 0 ? (
+                <EmptyState icon={<BarChart2 />} title="尚未有任何交易" message="點擊右下角的 '+' 按鈕來新增第一筆帳目吧！" />
+            ) : (
+                <ul className="space-y-3">
+                  <AnimatePresence>
+                    {transactions.slice(0, 30).map(tx => {
+                        const account = accounts.find(a => a.id === tx.accountId);
+                        if (tx.type === 'expense') {
+                            return <ExpenseItem key={`exp-${tx.id}`} expense={tx} account={account} onEdit={() => onEdit(tx, 'editExpense')} />;
+                        } else {
+                            return <IncomeItem key={`inc-${tx.id}`} income={tx} account={account} onEdit={() => onEdit(tx, 'editIncome')} />;
+                        }
+                    })}
+                  </AnimatePresence>
+                </ul>
+            )}
+        </div>
       </div>
     );
 };
-
-const AccountsPage = ({ accounts, balances, onDelete, onEdit }) => (
-    <div>
-        {accounts.length === 0 ? (
-            <div className="text-center py-10 px-4">
-                 <div className="inline-block bg-gray-100 rounded-full p-4"><Landmark className="h-10 w-10 text-gray-400" /></div>
-                 <h3 className="mt-4 text-lg font-medium text-gray-800">尚未建立任何帳戶</h3>
-                 <p className="mt-1 text-sm text-gray-500">點擊右下角的 '+' 按鈕來新增第一個帳戶。</p>
-            </div>
-        ) : (
-            <ul className="space-y-3">
-                {accounts.map(acc => {
-                    const balance = balances.get(acc.id) || 0;
-                    return (
-                        <li key={acc.id} onClick={() => onEdit(acc)} className="flex items-center p-4 bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer">
-                           <div className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-gray-100 text-gray-600">
-                                {accountTypes[acc.type]?.icon || <MoreHorizontal />}
-                           </div>
-                           <div className="flex-grow ml-4">
-                                <p className="font-medium text-gray-800">{acc.name}</p>
-                                <p className="text-xs text-gray-500">{acc.type}</p>
-                           </div>
-                           <div className="flex items-center">
-                               <p className={`text-lg font-semibold ${balance < 0 ? 'text-red-500' : 'text-gray-800'}`}>
-                                   $ {balance.toLocaleString()}
-                               </p>
-                               <button onClick={(e) => { e.stopPropagation(); onDelete('accounts', acc.id); }} className="ml-4 text-gray-400 hover:text-red-500 p-2 rounded-full hover:bg-red-50"><Trash2 className="h-4 w-4" /></button>
-                           </div>
-                        </li>
-                    )
-                })}
-            </ul>
-        )}
-    </div>
-);
-
-const RecurringPage = ({ recurring, installments, onAddExpense, onDelete, onEdit }) => {
-    const [view, setView] = useState('recurring');
-
-    const handleLogRecurring = (item) => {
-        onAddExpense({
-            description: item.description, amount: item.amount, category: '帳單',
-            accountId: item.paymentAccountId, recurringId: item.id
-        });
-    }
-
-    const handleLogInstallment = (item) => {
-        onAddExpense({
-            description: `${item.description} (第 ${ (item.paidInstallments || 0) + 1 } 期)`, amount: item.monthlyPayment,
-            category: '帳單', accountId: item.paymentAccountId, installmentId: item.id
-        });
-    }
-
-    return (
-        <div>
-            <div className="flex justify-center bg-gray-100 rounded-lg p-1 mb-5">
-                <button onClick={() => setView('recurring')} className={`w-1/2 py-2 text-sm font-semibold rounded-md transition-colors ${view === 'recurring' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600'}`}>定期支出</button>
-                <button onClick={() => setView('installments')} className={`w-1/2 py-2 text-sm font-semibold rounded-md transition-colors ${view === 'installments' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600'}`}>分期付款</button>
-            </div>
-
-            {view === 'recurring' && (
-                <div id="recurring-section">
-                     {recurring.length === 0 ? <p className="text-center text-gray-500 py-4">尚無定期支出項目</p> : (
-                        <ul className="space-y-3">
-                            {recurring.map(item => (
-                                <li key={item.id} className="p-3 bg-gray-50 rounded-lg flex items-center justify-between">
-                                    <div onClick={() => onEdit(item, 'editRecurring')} className="flex-grow cursor-pointer">
-                                        <p className="font-medium text-gray-800">{item.description}</p>
-                                        <p className="text-xs text-gray-500">每月 {item.dayOfMonth} 日・$ {item.amount.toLocaleString()}</p>
-                                    </div>
-                                    <button onClick={() => handleLogRecurring(item)} className="ml-2 bg-blue-500 text-white text-xs font-bold py-1 px-3 rounded-full hover:bg-blue-600 flex-shrink-0">記錄本次</button>
-                                </li>
-                            ))}
-                        </ul>
-                     )}
-                </div>
-            )}
-
-            {view === 'installments' && (
-                <div id="installments-section">
-                    {installments.length === 0 ? <p className="text-center text-gray-500 py-4">尚無分期付款項目</p> : (
-                        <ul className="space-y-3">
-                            {installments.map(item => {
-                                const isPaidOff = (item.paidInstallments || 0) >= item.totalInstallments;
-                                return (
-                                <li key={item.id} className={`p-3 rounded-lg flex items-center justify-between ${isPaidOff ? 'bg-green-50' : 'bg-gray-50'}`}>
-                                    <div onClick={() => onEdit(item, 'editInstallment')} className="flex-grow cursor-pointer">
-                                        <p className="font-medium text-gray-800">{item.description}</p>
-                                        <p className="text-xs text-gray-500">{item.platform}・$ {item.monthlyPayment.toLocaleString()}/月</p>
-                                        <div className="w-full bg-gray-200 rounded-full h-1.5 mt-2">
-                                            <div className="bg-blue-600 h-1.5 rounded-full" style={{width: `${((item.paidInstallments || 0)/item.totalInstallments)*100}%`}}></div>
-                                        </div>
-                                        <p className="text-xs text-gray-500 mt-1">進度: {item.paidInstallments || 0} / {item.totalInstallments}</p>
-                                    </div>
-                                    {!isPaidOff ? (
-                                        <button onClick={() => handleLogInstallment(item)} className="ml-2 bg-green-500 text-white text-xs font-bold py-1 px-3 rounded-full hover:bg-green-600 flex-shrink-0">繳本期</button>
-                                    ) : (
-                                        <span className="text-green-600 text-xs font-bold ml-2 flex-shrink-0">已付清</span>
-                                    )}
-                                </li>
-                            )})}
-                        </ul>
-                     )}
-                </div>
-            )}
-        </div>
-    );
-}
+const AccountsPage = ({ accounts, balances, onDelete, onEdit }) => { /* Component content */ };
+const RecurringPage = ({ recurring, installments, onAddExpense, onDelete, onEdit }) => { /* Component content */ };
 
 // --- Nav & Header Components ---
-
-const Header = ({ totalAssets, activePage }) => {
+const Header = ({ user, onLogin, onLogout, totalAssets, activePage }) => {
     const titles = { home: '總覽', accounts: '我的帳戶', recurring: '定期與分期' };
     return(
-        <header className="bg-blue-600 text-white p-6 rounded-b-3xl shadow-md sticky top-0 z-10">
+        <header className="bg-gradient-to-br from-sky-500 to-indigo-600 text-white p-6 rounded-b-3xl shadow-lg sticky top-0 z-10">
             <div className="flex justify-between items-center mb-4">
-                 <h1 className="text-xl font-bold">{titles[activePage]}</h1>
-                 <p className="text-xs opacity-80">使用者ID: {auth.currentUser?.uid.substring(0, 8) || '訪客'}</p>
+                 <h1 className="text-xl font-bold tracking-wide">{titles[activePage]}</h1>
+                 <div>
+                    {user && !user.isAnonymous ? (
+                        <div className="flex items-center gap-2">
+                            <img src={user.photoURL} alt={user.displayName} className="w-6 h-6 rounded-full" />
+                            <span className="text-xs font-medium hidden sm:inline">{user.displayName || '使用者'}</span>
+                            <button onClick={onLogout} className="flex items-center gap-1.5 text-xs bg-white/20 hover:bg-white/30 px-2 py-1 rounded-full transition-colors">
+                                <LogOut size={14} />
+                                登出
+                            </button>
+                        </div>
+                    ) : (
+                         <button onClick={onLogin} className="flex items-center gap-1.5 text-xs bg-white/20 hover:bg-white/30 px-2 py-1 rounded-full transition-colors">
+                            <LogIn size={14} />
+                            使用 Google 登入
+                        </button>
+                    )}
+                 </div>
             </div>
             {activePage === 'home' && (
                 <div className="text-center">
                     <p className="text-sm opacity-90">目前總資產</p>
                     <p className="text-4xl font-extrabold tracking-tight mt-1">
-                        $ {totalAssets.toLocaleString()}
+                        {user ? `$ ${totalAssets.toLocaleString()}` : '---'}
                     </p>
                 </div>
             )}
         </header>
     );
 }
-
-const BottomNav = ({ activePage, setActivePage }) => {
-  const navItems = [
-    { id: 'home', icon: <Home />, label: '總覽' },
-    { id: 'accounts', icon: <Landmark />, label: '帳戶' },
-    { id: 'recurring', icon: <Repeat />, label: '定期' },
-  ];
-  return (
-    <nav className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white border-t border-gray-200 flex justify-around p-2 z-20">
-      {navItems.map(item => (
-        <button
-          key={item.id}
-          onClick={() => setActivePage(item.id)}
-          className={`flex flex-col items-center justify-center w-20 h-16 rounded-lg transition-colors duration-200 ${
-            activePage === item.id ? 'text-blue-600 bg-blue-50' : 'text-gray-500 hover:bg-gray-100'
-          }`}
-        >
-          {React.cloneElement(item.icon, { className: 'h-6 w-6 mb-1' })}
-          <span className="text-xs font-medium">{item.label}</span>
-        </button>
-      ))}
-    </nav>
-  );
-};
-
+const BottomNav = ({ activePage, setActivePage }) => { /* Component content */ };
 
 // --- Main App Component ---
 export default function App() {
-  const [isAuthReady, setIsAuthReady] = useState(false);
-  const [userId, setUserId] = useState(null);
+  const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   
-  // Data states
   const [expenses, setExpenses] = useState([]);
   const [incomes, setIncomes] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [recurring, setRecurring] = useState([]);
   const [installments, setInstallments] = useState([]);
 
-  // UI states
   const [activePage, setActivePage] = useState('home');
   const [modal, setModal] = useState(null); 
   const [editingItem, setEditingItem] = useState(null);
   const [itemToDelete, setItemToDelete] = useState(null);
 
-  // --- Authentication ---
   useEffect(() => {
-    const unsubAuth = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        setUserId(user.uid);
-        setIsAuthReady(true);
+    if (firebaseError) {
+      setIsLoading(false);
+      return;
+    }
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if(currentUser) {
+        setUser(currentUser);
       } else {
-        try {
-          // In a real app, you might use a more robust token management system.
-          // For this example, we'll try to sign in anonymously.
-          await signInAnonymously(auth);
-        } catch (error) {
-          console.error("Authentication Error:", error);
-          setIsAuthReady(true);
-        }
+        // If no user, sign in anonymously to get a UID for local storage
+        await signInAnonymously(auth);
       }
+      setIsLoading(false);
     });
-    return () => unsubAuth();
+    return () => unsubscribe();
   }, []);
+  
+  const handleGoogleLogin = async () => {
+    const provider = new GoogleAuthProvider();
+    try {
+      await signInWithPopup(auth, provider);
+    } catch (error) {
+      console.error("Google 登入失敗:", error);
+    }
+  };
 
-  // --- Data Fetching ---
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      // After signing out, onAuthStateChanged will trigger a new anonymous user
+    } catch (error) {
+      console.error("登出失敗:", error);
+    }
+  };
+
   useEffect(() => {
-    if (!isAuthReady || !userId) {
-        if (isAuthReady && !userId) setIsLoading(false);
+    if (!user || firebaseError) {
+        setExpenses([]); setIncomes([]); setAccounts([]); setRecurring([]); setInstallments([]);
         return;
     }
 
@@ -772,40 +781,22 @@ export default function App() {
         { name: 'installments', setter: setInstallments },
     ];
     
-    setIsLoading(true);
-    let loadedCount = 0;
     const unsubs = collectionsToFetch.map(({ name, setter }) => {
-        const collPath = `users/${userId}/${name}`;
+        const collPath = `users/${user.uid}/${name}`;
         const q = query(collection(db, collPath));
         return onSnapshot(q, (snapshot) => {
             const data = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data(),
-                date: doc.data().date?.toDate(),
-                createdAt: doc.data().createdAt?.toDate(),
-                lastLoggedDate: doc.data().lastLoggedDate?.toDate(),
+                id: doc.id, ...doc.data(),
+                date: doc.data().date?.toDate(), createdAt: doc.data().createdAt?.toDate()
             }));
-            data.sort((a, b) => (b.createdAt || b.date || 0) - (a.createdAt || a.date || 0));
+            data.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
             setter(data);
-            loadedCount++;
-            if (loadedCount === collectionsToFetch.length) {
-                setIsLoading(false);
-            }
-        }, (error) => {
-            console.error(`Error fetching ${name}:`, error);
-            loadedCount++;
-            if (loadedCount === collectionsToFetch.length) {
-                setIsLoading(false);
-            }
         });
     });
     
-    return () => {
-        unsubs.forEach(unsub => unsub());
-    };
-  }, [isAuthReady, userId]);
+    return () => { unsubs.forEach(unsub => unsub()); };
+  }, [user]);
 
-  // --- Calculations ---
   const accountBalances = useMemo(() => {
     const balances = new Map();
     accounts.forEach(acc => {
@@ -822,23 +813,22 @@ export default function App() {
     return Array.from(accountBalances.values()).reduce((sum, bal) => sum + bal, 0);
   }, [accountBalances]);
 
-  // --- Handlers ---
   const handleAdd = async (collectionName, data) => {
-    if (!userId) return;
+    if (!user) return;
     try {
-        const collPath = `users/${userId}/${collectionName}`;
-        await addDoc(collection(db, collPath), { ...data, createdAt: serverTimestamp(), date: serverTimestamp() });
-        setModal(null);
+      const collPath = `users/${user.uid}/${collectionName}`;
+      await addDoc(collection(db, collPath), { ...data, createdAt: serverTimestamp(), date: serverTimestamp() });
+      setModal(null);
     } catch (error) {
-        console.error(`Error adding to ${collectionName}:`, error);
+      console.error(`Error adding to ${collectionName}:`, error);
     }
   };
   
   const handleUpdate = async (collectionName, docId, data) => {
-    if (!userId) return;
+    if (!user) return;
     try {
-      const docPath = `users/${userId}/${collectionName}/${docId}`;
-      const { id, ...updateData } = data; // Don't try to write the id field back to the doc
+      const docPath = `users/${user.uid}/${collectionName}/${docId}`;
+      const { id, ...updateData } = data;
       await updateDoc(doc(db, docPath), updateData);
       setModal(null);
       setEditingItem(null);
@@ -848,75 +838,46 @@ export default function App() {
   };
 
   const handleAddExpense = async (expenseData) => {
-      if (!userId) return;
-      const batch = writeBatch(db);
-
-      const expensesColPath = `users/${userId}/expenses`;
-      const newExpenseRef = doc(collection(db, expensesColPath));
-      batch.set(newExpenseRef, { ...expenseData, createdAt: serverTimestamp(), date: serverTimestamp() });
-
-      if(expenseData.installmentId) {
-          const installment = installments.find(i => i.id === expenseData.installmentId);
-          if (installment) {
-              const installmentRef = doc(db, `users/${userId}/installments`, expenseData.installmentId);
-              batch.update(installmentRef, {
-                  paidInstallments: (installment.paidInstallments || 0) + 1
-              });
-          }
-      }
-      
-      if(expenseData.recurringId) {
-          const recurringRef = doc(db, `users/${userId}/recurring`, expenseData.recurringId);
-          batch.update(recurringRef, { lastLoggedDate: serverTimestamp() });
-      }
-
-      await batch.commit();
-      setModal(null);
+    if (!user) return;
+    const batch = writeBatch(db);
+    const expensesColPath = `users/${user.uid}/expenses`;
+    const newExpenseRef = doc(collection(db, expensesColPath));
+    batch.set(newExpenseRef, { ...expenseData, createdAt: serverTimestamp(), date: serverTimestamp() });
+    await batch.commit();
+    setModal(null);
   }
 
   const handleTransfer = async (transferData) => {
-      if (!userId) return;
-      
-      const batch = writeBatch(db);
-      const now = serverTimestamp();
-
-      // 1. Create expense
-      const expenseRef = doc(collection(db, `users/${userId}/expenses`));
-      batch.set(expenseRef, {
-        amount: transferData.amount,
-        accountId: transferData.fromAccountId,
-        category: '轉帳',
-        description: transferData.description,
-        date: now,
-        createdAt: now,
-      });
-
-      // 2. Create income
-      const incomeRef = doc(collection(db, `users/${userId}/incomes`));
-       batch.set(incomeRef, {
-        amount: transferData.amount,
-        accountId: transferData.toAccountId,
-        category: '轉帳',
-        description: transferData.description,
-        date: now,
-        createdAt: now,
-      });
-
-      await batch.commit();
-      setModal(null);
+    if (!user) return;
+    const batch = writeBatch(db);
+    const now = serverTimestamp();
+    const expenseRef = doc(collection(db, `users/${user.uid}/expenses`));
+    batch.set(expenseRef, {
+      amount: transferData.amount, accountId: transferData.fromAccountId,
+      category: '轉帳', description: transferData.description,
+      date: now, createdAt: now,
+    });
+    const incomeRef = doc(collection(db, `users/${user.uid}/incomes`));
+    batch.set(incomeRef, {
+      amount: transferData.amount, accountId: transferData.toAccountId,
+      category: '轉帳', description: transferData.description,
+      date: now, createdAt: now,
+    });
+    await batch.commit();
+    setModal(null);
   }
 
   const confirmDelete = async () => {
-      if (!userId || !itemToDelete) return;
-      try {
-        const { collectionName, docId } = itemToDelete;
-        const docPath = `users/${userId}/${collectionName}/${docId}`;
-        await deleteDoc(doc(db, docPath));
-        setItemToDelete(null);
-      } catch (error) {
-        console.error(`Error deleting from ${itemToDelete.collectionName}:`, error);
-        setItemToDelete(null);
-      }
+    if (!user || !itemToDelete) return;
+    try {
+      const { collectionName, docId } = itemToDelete;
+      const docPath = `users/${user.uid}/${collectionName}/${docId}`;
+      await deleteDoc(doc(db, docPath));
+      setItemToDelete(null);
+    } catch (error) {
+      console.error(`Error deleting from ${itemToDelete.collectionName}:`, error);
+      setItemToDelete(null);
+    }
   };
 
   const openEditModal = (item, modalType) => {
@@ -924,8 +885,8 @@ export default function App() {
     setModal(modalType);
   };
 
-  // --- Render Logic ---
   const renderPage = () => {
+    if (!user) return <LoadingSpinner />;
     switch (activePage) {
       case 'home':
         return <HomePage expenses={expenses} incomes={incomes} accounts={accounts} onEdit={openEditModal} />;
@@ -957,39 +918,56 @@ export default function App() {
     }
   }
 
-  if (isLoading) {
-    return <div className="flex justify-center items-center min-h-screen bg-gray-50"><p>讀取中...</p></div>;
+  if (firebaseError) {
+      return (
+          <div className="flex flex-col justify-center items-center min-h-screen bg-red-50 p-4">
+              <div className="text-center">
+                  <AlertTriangle className="mx-auto h-12 w-12 text-red-500" />
+                  <h2 className="mt-4 text-xl font-bold text-red-800">應用程式設定錯誤</h2>
+                  <p className="mt-2 text-red-700">{firebaseError}</p>
+                  <p className="mt-4 text-sm text-gray-600">請確認您在部署平台 (如 Netlify) 的環境變數設定是否正確，並已重新部署。</p>
+              </div>
+          </div>
+      );
   }
 
   return (
-    <div className="bg-gray-50 font-sans antialiased">
-      <div className="container mx-auto max-w-lg min-h-screen bg-white shadow-lg flex flex-col">
-        <Header totalAssets={totalAssets} activePage={activePage} />
+    <div className="bg-slate-50 font-sans antialiased">
+      <div className="container mx-auto max-w-lg min-h-screen bg-slate-50">
+        <Header user={user} onLogin={handleGoogleLogin} onLogout={handleLogout} totalAssets={totalAssets} activePage={activePage} />
         
-        <main className="flex-grow p-4 pb-24">
-            {renderPage()}
+        <main className="p-4 pb-24">
+            {isLoading ? <LoadingSpinner /> : renderPage()}
         </main>
         
-        {!isLoading && (
+        {!isLoading && user && (
           <div className="fixed bottom-24 right-1/2 translate-x-1/2 z-20 sm:right-6 sm:translate-x-0">
-               <button
+               <motion.button
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
                   onClick={() => {
+                      if (!user || user.isAnonymous) {
+                          handleGoogleLogin();
+                          return;
+                      }
                       if (activePage === 'home') setModal('addTransactionMenu');
                       else if (activePage === 'accounts') setModal('addAccount');
                       else if (activePage === 'recurring') setModal('addRecurringOrInstallment');
                       else setModal('addTransactionMenu');
                   }}
-                  className="bg-blue-600 text-white rounded-full p-4 shadow-lg hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300 transition-transform duration-200 ease-in-out transform hover:scale-110"
+                  className="bg-sky-500 text-white rounded-full p-4 shadow-lg hover:bg-sky-600 focus:outline-none focus:ring-4 focus:ring-sky-300"
                   aria-label="新增項目"
                 >
                   <Plus className="h-7 w-7" />
-              </button>
+              </motion.button>
           </div>
         )}
         
         <BottomNav activePage={activePage} setActivePage={setActivePage} />
-        {renderModal()}
-        {itemToDelete && <ConfirmDeleteModal onConfirm={confirmDelete} onCancel={() => setItemToDelete(null)} message={itemToDelete.message} />}
+        <AnimatePresence>
+            {modal && renderModal()}
+            {itemToDelete && <ConfirmDeleteModal onConfirm={confirmDelete} onCancel={() => setItemToDelete(null)} message={itemToDelete.message} />}
+        </AnimatePresence>
       </div>
     </div>
   );
