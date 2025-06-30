@@ -2,7 +2,6 @@
   "name": "my-accounting-app",
   "version": "0.1.0",
   "private": true,
-  "homepage": "https://yuri1814.github.io/my-accounting-app",
   "dependencies": {
     "firebase": "^9.23.0",
     "lucide-react": "^0.303.0",
