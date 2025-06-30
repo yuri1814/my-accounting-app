@@ -9,7 +9,7 @@ import {
   signOut,
   GoogleAuthProvider,
 } from "firebase/auth";
-import { Plus, Trash2, X, TrendingUp, Landmark, CreditCard, Wallet, MoreHorizontal, Home, Repeat, ArrowDown, ArrowUp, Smartphone, Shuffle, AlertTriangle, PieChart as PieChartIcon, BarChart2, LogIn, LogOut } from 'lucide-react';
+import { Plus, X, TrendingUp, Landmark, CreditCard, Wallet, MoreHorizontal, Repeat, ArrowDown, ArrowUp, Smartphone, Shuffle, AlertTriangle, PieChart as PieChartIcon, BarChart2, LogIn, LogOut } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { motion, AnimatePresence } from 'framer-motion';
 
