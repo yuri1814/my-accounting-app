@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, addDoc, onSnapshot, query, doc, deleteDoc, updateDoc, serverTimestamp, writeBatch, getDocs } from 'firebase/firestore';
+import { getFirestore, collection, onSnapshot, query, doc, writeBatch, getDocs } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
-import { Plus, Trash2, X, TrendingUp, Landmark, CreditCard, Wallet, MoreHorizontal, Home, Repeat, ArrowDown, ArrowUp, Smartphone, Shuffle, AlertTriangle, PieChart as PieChartIcon, BarChart2, LogIn, LogOut, Settings, Tag } from 'lucide-react';
+import { TrendingUp, MoreHorizontal, Shuffle, Home } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -45,8 +45,20 @@ const BriefcaseIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" h
 const StarIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>;
 
 // --- Default Data & Icons ---
-const ICONS = { UtensilsIcon, ShoppingCartIcon, CarIcon, Gamepad2Icon, HomeIcon: Home, ReceiptIcon, BriefcaseIcon, StarIcon, TrendingUp, MoreHorizontal, Shuffle, Tag };
-const ICON_NAMES = Object.keys(ICONS);
+const ICONS = {
+  UtensilsIcon,
+  ShoppingCartIcon,
+  CarIcon,
+  Gamepad2Icon,
+  HomeIcon: Home,
+  ReceiptIcon,
+  BriefcaseIcon,
+  StarIcon,
+  TrendingUp,
+  MoreHorizontal,
+  Shuffle,
+};
+
 const COLORS = ['#0EA5E9', '#22C55E', '#F97316', '#8B5CF6', '#EC4899', '#FACC15', '#64748B', '#14B8A6'];
 
 const DEFAULT_EXPENSE_CATEGORIES = [
@@ -58,6 +70,7 @@ const DEFAULT_EXPENSE_CATEGORIES = [
   { name: '月費', icon: 'ReceiptIcon', color: COLORS[5] },
   { name: '其他支出', icon: 'MoreHorizontal', color: COLORS[6] },
 ];
+
 const DEFAULT_INCOME_CATEGORIES = [
   { name: '薪資', icon: 'BriefcaseIcon', color: COLORS[1] },
   { name: '獎金', icon: 'StarIcon', color: COLORS[5] },
@@ -65,26 +78,23 @@ const DEFAULT_INCOME_CATEGORIES = [
 ];
 
 const DynamicIcon = ({ name, className }) => {
-    const IconComponent = ICONS[name] || MoreHorizontal;
-    return <IconComponent className={className} />;
+  const IconComponent = ICONS[name] || MoreHorizontal;
+  return <IconComponent className={className} />;
 };
 
 // --- Main App Component ---
 export default function App() {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  
   const [expenseCategories, setExpenseCategories] = useState([]);
   const [incomeCategories, setIncomeCategories] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [transactions, setTransactions] = useState([]);
-
   const [activePage, setActivePage] = useState('home');
-  const [modal, setModal] = useState(null); 
+  const [modal, setModal] = useState(null);
   const [editingItem, setEditingItem] = useState(null);
   const [itemToDelete, setItemToDelete] = useState(null);
 
-  // --- Authentication Handling ---
   useEffect(() => {
     if (firebaseError) {
       setIsLoading(false);
@@ -96,7 +106,7 @@ export default function App() {
     });
     return () => unsubscribe();
   }, []);
-  
+
   const handleGoogleLogin = async () => {
     const provider = new GoogleAuthProvider();
     try {
@@ -115,72 +125,71 @@ export default function App() {
     }
   };
 
-  // --- Data Fetching & Default Category Creation ---
   useEffect(() => {
     if (!user || firebaseError) {
-        setExpenseCategories([]);
-        setIncomeCategories([]);
-        setAccounts([]);
-        setTransactions([]);
-        return;
+      setExpenseCategories([]);
+      setIncomeCategories([]);
+      setAccounts([]);
+      setTransactions([]);
+      return;
     }
 
     const setupDefaultCategories = async (uid) => {
-        const expenseCatRef = collection(db, `users/${uid}/expenseCategories`);
-        const incomeCatRef = collection(db, `users/${uid}/incomeCategories`);
-        
-        const expenseSnap = await getDocs(expenseCatRef);
-        if (expenseSnap.empty) {
-            const batch = writeBatch(db);
-            DEFAULT_EXPENSE_CATEGORIES.forEach(cat => {
-                const newDocRef = doc(expenseCatRef);
-                batch.set(newDocRef, cat);
-            });
-            await batch.commit();
-        }
+      const expenseCatRef = collection(db, `users/${uid}/expenseCategories`);
+      const incomeCatRef = collection(db, `users/${uid}/incomeCategories`);
 
-        const incomeSnap = await getDocs(incomeCatRef);
-        if (incomeSnap.empty) {
-            const batch = writeBatch(db);
-            DEFAULT_INCOME_CATEGORIES.forEach(cat => {
-                const newDocRef = doc(incomeCatRef);
-                batch.set(newDocRef, cat);
-            });
-            await batch.commit();
-        }
+      const expenseSnap = await getDocs(expenseCatRef);
+      if (expenseSnap.empty) {
+        const batch = writeBatch(db);
+        DEFAULT_EXPENSE_CATEGORIES.forEach(cat => {
+          const newDocRef = doc(expenseCatRef);
+          batch.set(newDocRef, cat);
+        });
+        await batch.commit();
+      }
+
+      const incomeSnap = await getDocs(incomeCatRef);
+      if (incomeSnap.empty) {
+        const batch = writeBatch(db);
+        DEFAULT_INCOME_CATEGORIES.forEach(cat => {
+          const newDocRef = doc(incomeCatRef);
+          batch.set(newDocRef, cat);
+        });
+        await batch.commit();
+      }
     };
 
     setupDefaultCategories(user.uid);
 
     const collectionsToFetch = [
-        { name: 'expenseCategories', setter: setExpenseCategories },
-        { name: 'incomeCategories', setter: setIncomeCategories },
-        { name: 'accounts', setter: setAccounts },
-        { name: 'transactions', setter: setTransactions },
+      { name: 'expenseCategories', setter: setExpenseCategories },
+      { name: 'incomeCategories', setter: setIncomeCategories },
+      { name: 'accounts', setter: setAccounts },
+      { name: 'transactions', setter: setTransactions },
     ];
-    
+
     const unsubs = collectionsToFetch.map(({ name, setter }) => {
-        const collPath = `users/${user.uid}/${name}`;
-        const q = query(collection(db, collPath));
-        return onSnapshot(q, (snapshot) => {
-            const data = snapshot.docs.map(doc => ({
-                id: doc.id, ...doc.data(),
-                date: doc.data().date?.toDate(), createdAt: doc.data().createdAt?.toDate()
-            }));
-            if (name.includes('Categories')) {
-                setter(data);
-            } else {
-                data.sort((a, b) => (b.date || 0) - (a.date || 0));
-                setter(data);
-            }
-        });
+      const collPath = `users/${user.uid}/${name}`;
+      const q = query(collection(db, collPath));
+      return onSnapshot(q, (snapshot) => {
+        const data = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+          date: doc.data().date?.toDate(),
+          createdAt: doc.data().createdAt?.toDate()
+        }));
+        if (name.includes('Categories')) {
+          setter(data);
+        } else {
+          data.sort((a, b) => (b.date || 0) - (a.date || 0));
+          setter(data);
+        }
+      });
     });
-    
+
     return () => { unsubs.forEach(unsub => unsub()); };
   }, [user]);
 
-  // All other logic... (Calculations, Handlers, Render functions)
-  
   return (
     <div className="bg-slate-50 font-sans antialiased">
       {/* ... App UI ... */}
