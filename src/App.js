@@ -64,6 +64,15 @@ const DEFAULT_INCOME_CATEGORIES = [
   { name: '其他收入', icon: 'MoreHorizontal', color: COLORS[6] },
 ];
 
+const accountTypes = {
+  '銀行帳戶': { icon: <Landmark className="h-5 w-5" /> },
+  '信用卡': { icon: <CreditCard className="h-5 w-5" /> },
+  '現金': { icon: <Wallet className="h-5 w-5" /> },
+  '電子支付': { icon: <Smartphone className="h-5 w-5" /> },
+  '其他資產': { icon: <MoreHorizontal className="h-5 w-5" /> },
+};
+
+
 const DynamicIcon = ({ name, className }) => {
     const IconComponent = ICONS[name] || MoreHorizontal;
     return <IconComponent className={className} />;
@@ -91,10 +100,10 @@ const CategorySelector = ({ categories, selected, onSelect, type }) => {
         <div>
             <label className="text-sm font-medium text-gray-700 mb-2 block">分類</label>
             <div className="grid grid-cols-4 gap-2">
-                 {Object.keys(categories).map(catName => (
-                    <button type="button" key={catName} onClick={() => onSelect(categories[catName].name)} className={`flex flex-col items-center justify-center p-2 rounded-lg border-2 ${selected === categories[catName].name ? `border-${baseColor}-500 bg-${baseColor}-50` : 'border-transparent bg-gray-100'}`}>
-                        <DynamicIcon name={categories[catName].icon} className="h-5 w-5" />
-                        <span className={`text-xs mt-1 ${selected === categories[catName].name ? `text-${baseColor}-600` : 'text-gray-600'}`}>{categories[catName].name}</span>
+                 {categories.map(cat => (
+                    <button type="button" key={cat.id} onClick={() => onSelect(cat.name)} className={`flex flex-col items-center justify-center p-2 rounded-lg border-2 ${selected === cat.name ? `border-${baseColor}-500 bg-${baseColor}-50` : 'border-transparent bg-gray-100'}`}>
+                        <DynamicIcon name={cat.icon} className="h-5 w-5" />
+                        <span className={`text-xs mt-1 ${selected === cat.name ? `text-${baseColor}-600` : 'text-gray-600'}`}>{cat.name}</span>
                     </button>
                  ))}
             </div>
@@ -129,30 +138,11 @@ const TransactionItemWrapper = ({ children, onEdit, isEditable = true }) => (
     </motion.li>
 );
 
-const ExpenseItem = ({ transaction, account, onEdit, expenseCategories }) => {
-    const categoryInfo = expenseCategories.find(c => c.name === transaction.category) || { name: '其他支出', icon: 'MoreHorizontal', color: '#64748B' };
+const TransactionItem = ({ transaction, account, onEdit, categories }) => {
+    const isExpense = transaction.type === 'expense';
+    const categoryInfo = categories.find(c => c.name === transaction.category) || { name: transaction.category, icon: 'MoreHorizontal', color: COLORS[6] };
     const isTransfer = transaction.category === '轉帳';
-    return(
-      <TransactionItemWrapper onEdit={onEdit} isEditable={!isTransfer}>
-        <div className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center" style={{backgroundColor: categoryInfo.color.replace('600', '100'), color: categoryInfo.color}}>
-          {isTransfer ? <Shuffle className="h-5 w-5" /> : <DynamicIcon name={categoryInfo.icon} className="h-5 w-5" />}
-        </div>
-        <div className="flex-grow ml-4">
-          <p className="font-medium text-gray-800">{transaction.description}</p>
-          <p className="text-xs text-gray-500">
-            {account?.name || '未分類帳戶'} · {transaction.date ? transaction.date.toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' }) : ''}
-          </p>
-        </div>
-        <p className={`text-base font-semibold ${isTransfer ? 'text-gray-700' : 'text-red-600'}`}>
-          - $ {Number(transaction.amount).toLocaleString()}
-        </p>
-      </TransactionItemWrapper>
-    );
-};
 
-const IncomeItem = ({ transaction, account, onEdit, incomeCategories }) => {
-    const categoryInfo = incomeCategories.find(c => c.name === transaction.category) || { name: '其他收入', icon: 'MoreHorizontal', color: '#64748B' };
-    const isTransfer = transaction.category === '轉帳';
     return(
       <TransactionItemWrapper onEdit={onEdit} isEditable={!isTransfer}>
         <div className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center" style={{backgroundColor: categoryInfo.color.replace('600', '100'), color: categoryInfo.color}}>
@@ -164,8 +154,8 @@ const IncomeItem = ({ transaction, account, onEdit, incomeCategories }) => {
             {account?.name || '未分類帳戶'} · {transaction.date ? transaction.date.toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' }) : ''}
           </p>
         </div>
-        <p className={`text-base font-semibold ${isTransfer ? 'text-gray-700' : 'text-green-600'}`}>
-          + $ {Number(transaction.amount).toLocaleString()}
+        <p className={`text-base font-semibold ${isTransfer ? 'text-gray-700' : (isExpense ? 'text-red-600' : 'text-green-600')}`}>
+          {isExpense ? '- $' : '+ $'} {Number(transaction.amount).toLocaleString()}
         </p>
       </TransactionItemWrapper>
     );
@@ -393,7 +383,118 @@ const AddCategoryModal = ({ onClose, onAdd, onUpdate, initialData, type }) => {
     );
 };
 
-// ... All other modals are here ...
+const AddTransferModal = ({ onClose, onAdd, accounts }) => {
+    const [fromAccountId, setFromAccountId] = useState(accounts[0]?.id || '');
+    const [toAccountId, setToAccountId] = useState(accounts[1]?.id || '');
+    const [amount, setAmount] = useState('');
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+        if(fromAccountId === toAccountId && accounts.length > 1) {
+            const differentAccount = accounts.find(acc => acc.id !== fromAccountId);
+            if(differentAccount) {
+                setToAccountId(differentAccount.id);
+            }
+        }
+    }, [fromAccountId, toAccountId, accounts]);
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        if(!fromAccountId || !toAccountId || !amount) {
+            setError('所有欄位皆為必填');
+            return;
+        }
+        if(fromAccountId === toAccountId) {
+            setError('轉出和轉入帳戶不能相同');
+            return;
+        }
+        if(Number(amount) <= 0) {
+            setError('金額必須大於 0');
+            return;
+        }
+        setError('');
+        const fromAccountName = accounts.find(a => a.id === fromAccountId)?.name;
+        const toAccountName = accounts.find(a => a.id === toAccountId)?.name;
+
+        onAdd({
+            fromAccountId,
+            toAccountId,
+            amount: Number(amount),
+            description: `從 ${fromAccountName} 轉至 ${toAccountName}`,
+        });
+    }
+
+    const availableToAccounts = accounts.filter(acc => acc.id !== fromAccountId);
+
+    return (
+        <ModalWrapper onClose={onClose} title="新增轉帳">
+            <form onSubmit={handleSubmit} className="space-y-4">
+                {error && <p className="text-red-500 text-sm text-center -mt-2 mb-2">{error}</p>}
+                <InputField as="select" label="從帳戶" value={fromAccountId} onChange={e => setFromAccountId(e.target.value)}>
+                    {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.name}</option>)}
+                </InputField>
+                 <InputField as="select" label="至帳戶" value={toAccountId} onChange={e => setToAccountId(e.target.value)}>
+                    {availableToAccounts.map(acc => <option key={acc.id} value={acc.id}>{acc.name}</option>)}
+                </InputField>
+                <InputField label="金額" type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="1000" />
+                <button type="submit" className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700">確認轉帳</button>
+            </form>
+        </ModalWrapper>
+    );
+}
+
+// --- New Visual Components ---
+const LoadingSpinner = () => (
+    <div className="flex justify-center items-center py-20">
+        <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+            className="w-12 h-12 border-4 border-slate-200 border-t-sky-500 rounded-full"
+        />
+    </div>
+);
+const EmptyState = ({ icon, title, message }) => (
+    <motion.div 
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="text-center py-16 px-4 bg-slate-50/50 rounded-2xl"
+    >
+        <div className="inline-block bg-white rounded-full p-4 shadow-sm">
+            {React.cloneElement(icon, { className: 'h-12 w-12 text-slate-400' })}
+        </div>
+        <h3 className="mt-4 text-lg font-medium text-slate-800">{title}</h3>
+        <p className="mt-1 text-sm text-slate-500">{message}</p>
+    </motion.div>
+);
+const ExpensePieChart = ({ data }) => {
+    if (!data || data.length === 0) {
+        return <EmptyState icon={<PieChartIcon />} title="本月尚無支出" message="新增支出後，這裡會顯示您的消費分析圖表。"/>
+    }
+    return (
+        <div className="w-full h-64">
+            <ResponsiveContainer>
+                <PieChart>
+                    <Pie
+                        data={data}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        outerRadius={80}
+                        fill="#8884d8"
+                        dataKey="value"
+                        nameKey="name"
+                    >
+                        {data.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                    </Pie>
+                    <Tooltip formatter={(value) => `$${value.toLocaleString()}`} />
+                    <Legend iconType="circle" />
+                </PieChart>
+            </ResponsiveContainer>
+        </div>
+    );
+};
 
 // --- Page Components ---
 const HomePage = ({ transactions, accounts, expenseCategories, incomeCategories, onEdit }) => {
@@ -457,17 +558,46 @@ const HomePage = ({ transactions, accounts, expenseCategories, incomeCategories,
                   <AnimatePresence>
                     {filteredTransactions.slice(0, 30).map(tx => {
                         const account = accounts.find(a => a.id === tx.accountId);
-                        if (tx.type === 'expense') {
-                            return <ExpenseItem key={`tx-${tx.id}`} transaction={tx} account={account} onEdit={() => onEdit(tx, 'editTransaction')} expenseCategories={expenseCategories} />;
-                        } else {
-                            return <IncomeItem key={`tx-${tx.id}`} transaction={tx} account={account} onEdit={() => onEdit(tx, 'editTransaction')} incomeCategories={incomeCategories} />;
-                        }
+                        return <TransactionItem key={`tx-${tx.id}`} transaction={tx} account={account} onEdit={() => onEdit(tx, 'editTransaction')} categories={tx.type === 'expense' ? expenseCategories : incomeCategories} />;
                     })}
                   </AnimatePresence>
                 </ul>
             )}
         </div>
       </div>
+    );
+};
+
+const AccountsPage = ({ accounts, balances, onDelete, onEdit }) => {
+    return(
+        <div>
+            {accounts.length === 0 ? (
+                <EmptyState icon={<Landmark />} title="尚未建立任何帳戶" message="點擊右下角的 '+' 按鈕來新增第一個帳戶。" />
+            ) : (
+                <ul className="space-y-3">
+                    {accounts.map(acc => {
+                        const balance = balances.get(acc.id) || 0;
+                        return (
+                            <li key={acc.id} onClick={() => onEdit(acc)} className="flex items-center p-4 bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer">
+                               <div className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-gray-100 text-gray-600">
+                                    {accountTypes[acc.type]?.icon || <MoreHorizontal />}
+                               </div>
+                               <div className="flex-grow ml-4">
+                                    <p className="font-medium text-gray-800">{acc.name}</p>
+                                    <p className="text-xs text-gray-500">{acc.type}</p>
+                               </div>
+                               <div className="flex items-center">
+                                   <p className={`text-lg font-semibold ${balance < 0 ? 'text-red-500' : 'text-gray-800'}`}>
+                                       $ {balance.toLocaleString()}
+                                   </p>
+                                   <button onClick={(e) => { e.stopPropagation(); onDelete(acc.id); }} className="ml-4 text-gray-400 hover:text-red-500 p-2 rounded-full hover:bg-red-50"><Trash2 className="h-4 w-4" /></button>
+                               </div>
+                            </li>
+                        )
+                    })}
+                </ul>
+            )}
+        </div>
     );
 };
 
@@ -502,7 +632,7 @@ const CategoriesPage = ({ expenseCategories, incomeCategories, onAdd, onUpdate, 
                         </div>
                         <p className="flex-grow ml-4 font-medium text-gray-800">{cat.name}</p>
                         <button onClick={() => openModal('edit', cat)} className="p-2 text-gray-400 hover:text-blue-500"><Settings size={16} /></button>
-                        <button onClick={() => onDelete(view, cat.id)} className="p-2 text-gray-400 hover:text-red-500"><Trash2 size={16} /></button>
+                        <button onClick={() => handleDelete(view, cat.id)} className="p-2 text-gray-400 hover:text-red-500"><Trash2 size={16} /></button>
                     </li>
                 ))}
             </ul>
@@ -534,12 +664,334 @@ const CategoriesPage = ({ expenseCategories, incomeCategories, onAdd, onUpdate, 
     );
 };
 
-// ... Other components ...
+// --- Nav & Header Components ---
+const Header = ({ user, onLogin, onLogout, totalAssets, activePage }) => {
+    const titles = { home: '總覽', accounts: '我的帳戶', categories: '分類管理' };
+    return(
+        <header className="bg-gradient-to-br from-sky-500 to-indigo-600 text-white p-6 rounded-b-3xl shadow-lg sticky top-0 z-10">
+            <div className="flex justify-between items-center mb-4">
+                 <h1 className="text-xl font-bold tracking-wide">{titles[activePage]}</h1>
+                 <div>
+                    {user ? (
+                        <div className="flex items-center gap-2">
+                             <img src={user.photoURL} alt={user.displayName} className="w-6 h-6 rounded-full" />
+                            <span className="text-xs font-medium hidden sm:inline">{user.displayName || '使用者'}</span>
+                            <button onClick={onLogout} className="flex items-center gap-1.5 text-xs bg-white/20 hover:bg-white/30 px-2 py-1 rounded-full transition-colors">
+                                <LogOut size={14} />
+                                登出
+                            </button>
+                        </div>
+                    ) : (
+                         <button onClick={onLogin} className="flex items-center gap-1.5 text-xs bg-white/20 hover:bg-white/30 px-2 py-1 rounded-full transition-colors">
+                            <LogIn size={14} />
+                            使用 Google 登入
+                        </button>
+                    )}
+                 </div>
+            </div>
+            {activePage === 'home' && (
+                <div className="text-center">
+                    <p className="text-sm opacity-90">目前總資產</p>
+                    <p className="text-4xl font-extrabold tracking-tight mt-1">
+                        {user ? `$ ${totalAssets.toLocaleString()}` : '---'}
+                    </p>
+                </div>
+            )}
+        </header>
+    );
+}
+const BottomNav = ({ activePage, setActivePage }) => {
+  const navItems = [
+    { id: 'home', icon: <Home />, label: '總覽' },
+    { id: 'accounts', icon: <Landmark />, label: '帳戶' },
+    { id: 'categories', icon: <Tag />, label: '分類' },
+  ];
+  return (
+    <nav className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white border-t border-gray-200 flex justify-around p-2 z-20">
+      {navItems.map(item => (
+        <button
+          key={item.id}
+          onClick={() => setActivePage(item.id)}
+          className={`flex flex-col items-center justify-center w-20 h-16 rounded-lg transition-colors duration-200 ${
+            activePage === item.id ? 'text-blue-600 bg-blue-50' : 'text-gray-500 hover:bg-gray-100'
+          }`}
+        >
+          {React.cloneElement(item.icon, { className: 'h-6 w-6 mb-1' })}
+          <span className="text-xs font-medium">{item.label}</span>
+        </button>
+      ))}
+    </nav>
+  );
+};
+
 
 // --- Main App Component ---
 export default function App() {
-    // ... all state and logic ...
-    return (
-        // ... app JSX ...
-    );
+  const [user, setUser] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  const [expenseCategories, setExpenseCategories] = useState([]);
+  const [incomeCategories, setIncomeCategories] = useState([]);
+  const [accounts, setAccounts] = useState([]);
+  const [transactions, setTransactions] = useState([]);
+
+  const [activePage, setActivePage] = useState('home');
+  const [modal, setModal] = useState(null); 
+  const [editingItem, setEditingItem] = useState(null);
+  const [itemToDelete, setItemToDelete] = useState(null);
+
+  useEffect(() => {
+    if (firebaseError) {
+      setIsLoading(false);
+      return;
+    }
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser);
+      setIsLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+  
+  const handleGoogleLogin = async () => {
+    const provider = new GoogleAuthProvider();
+    try {
+      await signInWithPopup(auth, provider);
+    } catch (error) {
+      console.error("Google 登入失敗:", error);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      setUser(null);
+    } catch (error) {
+      console.error("登出失敗:", error);
+    }
+  };
+
+  useEffect(() => {
+    if (!user || firebaseError) {
+        setExpenseCategories([]);
+        setIncomeCategories([]);
+        setAccounts([]);
+        setTransactions([]);
+        return;
+    }
+
+    const setupDefaultCategories = async (uid) => {
+        const expenseCatRef = collection(db, `users/${uid}/expenseCategories`);
+        const incomeCatRef = collection(db, `users/${uid}/incomeCategories`);
+        
+        const expenseSnap = await getDocs(expenseCatRef);
+        if (expenseSnap.empty) {
+            const batch = writeBatch(db);
+            DEFAULT_EXPENSE_CATEGORIES.forEach(cat => {
+                const newDocRef = doc(expenseCatRef);
+                batch.set(newDocRef, cat);
+            });
+            await batch.commit();
+        }
+
+        const incomeSnap = await getDocs(incomeCatRef);
+        if (incomeSnap.empty) {
+            const batch = writeBatch(db);
+            DEFAULT_INCOME_CATEGORIES.forEach(cat => {
+                const newDocRef = doc(incomeCatRef);
+                batch.set(newDocRef, cat);
+            });
+            await batch.commit();
+        }
+    };
+
+    setupDefaultCategories(user.uid);
+
+    const collectionsToFetch = [
+        { name: 'expenseCategories', setter: setExpenseCategories },
+        { name: 'incomeCategories', setter: setIncomeCategories },
+        { name: 'accounts', setter: setAccounts },
+        { name: 'transactions', setter: setTransactions },
+    ];
+    
+    const unsubs = collectionsToFetch.map(({ name, setter }) => {
+        const collPath = `users/${user.uid}/${name}`;
+        const q = query(collection(db, collPath));
+        return onSnapshot(q, (snapshot) => {
+            const data = snapshot.docs.map(doc => ({
+                id: doc.id, ...doc.data(),
+                date: doc.data().date?.toDate(), createdAt: doc.data().createdAt?.toDate()
+            }));
+            if (name.includes('Categories')) {
+                setter(data);
+            } else {
+                data.sort((a, b) => (b.date || 0) - (a.date || 0));
+                setter(data);
+            }
+        });
+    });
+    
+    return () => { unsubs.forEach(unsub => unsub()); };
+  }, [user]);
+
+  const accountBalances = useMemo(() => {
+    const balances = new Map();
+    accounts.forEach(acc => {
+      const accountTransactions = transactions.filter(t => t.accountId === acc.id);
+      const total = accountTransactions.reduce((sum, t) => {
+        return t.type === 'expense' ? sum - Number(t.amount) : sum + Number(t.amount);
+      }, Number(acc.initialBalance));
+      balances.set(acc.id, total);
+    });
+    return balances;
+  }, [accounts, transactions]);
+
+  const totalAssets = useMemo(() => {
+    return Array.from(accountBalances.values()).reduce((sum, bal) => sum + bal, 0);
+  }, [accountBalances]);
+
+  const handleAdd = async (collectionName, data) => {
+    if (!user) return;
+    try {
+      const collPath = `users/${user.uid}/${collectionName}`;
+      await addDoc(collection(db, collPath), { ...data, createdAt: serverTimestamp(), date: serverTimestamp() });
+      setModal(null);
+    } catch (error) {
+      console.error(`Error adding to ${collectionName}:`, error);
+    }
+  };
+  
+  const handleUpdate = async (collectionName, docId, data) => {
+    if (!user) return;
+    try {
+      const docPath = `users/${user.uid}/${collectionName}/${docId}`;
+      const { id, ...updateData } = data;
+      await updateDoc(doc(db, docPath), updateData);
+      setModal(null);
+      setEditingItem(null);
+    } catch (error) {
+      console.error(`Error updating ${collectionName}:`, error);
+    }
+  };
+
+  const handleTransfer = async (transferData) => {
+    if (!user) return;
+    const batch = writeBatch(db);
+    const now = serverTimestamp();
+    
+    const expenseData = {
+        amount: transferData.amount, accountId: transferData.fromAccountId,
+        category: '轉帳', description: transferData.description,
+        type: 'expense', date: now, createdAt: now,
+    };
+    batch.set(doc(collection(db, `users/${user.uid}/transactions`)), expenseData);
+
+    const incomeData = {
+        amount: transferData.amount, accountId: transferData.toAccountId,
+        category: '轉帳', description: transferData.description,
+        type: 'income', date: now, createdAt: now,
+    };
+    batch.set(doc(collection(db, `users/${user.uid}/transactions`)), incomeData);
+
+    await batch.commit();
+    setModal(null);
+  }
+
+  const confirmDelete = async () => {
+    if (!user || !itemToDelete) return;
+    try {
+      const { collectionName, docId } = itemToDelete;
+      const docPath = `users/${user.uid}/${collectionName}/${docId}`;
+      await deleteDoc(doc(db, docPath));
+      setItemToDelete(null);
+    } catch (error) {
+      console.error(`Error deleting from ${itemToDelete.collectionName}:`, error);
+      setItemToDelete(null);
+    }
+  };
+
+  const openEditModal = (item, modalType) => {
+    setEditingItem(item);
+    setModal(modalType);
+  };
+
+  const renderPage = () => {
+    if (!user) return <HomePage transactions={[]} accounts={[]} expenseCategories={[]} incomeCategories={[]} onEdit={() => {}} />;
+    switch (activePage) {
+      case 'home':
+        return <HomePage transactions={transactions} accounts={accounts} expenseCategories={expenseCategories} incomeCategories={incomeCategories} onEdit={openEditModal} />;
+      case 'accounts':
+        return <AccountsPage accounts={accounts} balances={accountBalances} onDelete={(id) => setItemToDelete({ collectionName: 'accounts', docId: id, message: '刪除帳戶將會影響相關交易，確定嗎？' })} onEdit={(item) => openEditModal(item, 'editAccount')} />;
+      case 'categories':
+        return <CategoriesPage expenseCategories={expenseCategories} incomeCategories={incomeCategories} onAdd={handleAdd} onUpdate={handleUpdate} onDelete={(coll, id) => setItemToDelete({ collectionName: coll, docId: id, message: '刪除分類會影響相關交易紀錄，確定嗎？' })} />;
+      default:
+        return <HomePage transactions={transactions} accounts={accounts} expenseCategories={expenseCategories} incomeCategories={incomeCategories} onEdit={openEditModal} />;
+    }
+  };
+
+  const renderModal = () => {
+    switch(modal) {
+        case 'addTransactionMenu': return <AddTransactionMenu onClose={() => setModal(null)} onSelect={setModal} />;
+        case 'addExpense': return <AddTransactionModal onClose={() => setModal(null)} onAdd={(data) => handleAdd('transactions', data)} accounts={accounts} categories={expenseCategories} type="expense" />;
+        case 'addIncome': return <AddTransactionModal onClose={() => setModal(null)} onAdd={(data) => handleAdd('transactions', data)} accounts={accounts} categories={incomeCategories} type="income" />;
+        case 'editTransaction': return <AddTransactionModal onClose={() => { setModal(null); setEditingItem(null);}} onUpdate={(id, data) => handleUpdate('transactions', id, data)} accounts={accounts} categories={editingItem.type === 'expense' ? expenseCategories : incomeCategories} type={editingItem.type} initialData={editingItem} />;
+        case 'addTransfer': return <AddTransferModal onClose={() => setModal(null)} onAdd={handleTransfer} accounts={accounts} />;
+        case 'addAccount': return <AddAccountModal onClose={() => setModal(null)} onAdd={(data) => handleAdd('accounts', data)} />;
+        case 'editAccount': return <AddAccountModal onClose={() => { setModal(null); setEditingItem(null);}} onUpdate={(id, data) => handleUpdate('accounts', id, data)} initialData={editingItem} />;
+        default: return null;
+    }
+  }
+
+  if (firebaseError) {
+      return (
+          <div className="flex flex-col justify-center items-center min-h-screen bg-red-50 p-4">
+              <div className="text-center">
+                  <AlertTriangle className="mx-auto h-12 w-12 text-red-500" />
+                  <h2 className="mt-4 text-xl font-bold text-red-800">應用程式設定錯誤</h2>
+                  <p className="mt-2 text-red-700">{firebaseError}</p>
+                  <p className="mt-4 text-sm text-gray-600">請確認您在部署平台 (如 Netlify) 的環境變數設定是否正確，並已重新部署。</p>
+              </div>
+          </div>
+      );
+  }
+
+  return (
+    <div className="bg-slate-50 font-sans antialiased">
+      <div className="container mx-auto max-w-lg min-h-screen bg-slate-50">
+        <Header user={user} onLogin={handleGoogleLogin} onLogout={handleLogout} totalAssets={totalAssets} activePage={activePage} />
+        
+        <main className="p-4 pb-24">
+            {isLoading ? <LoadingSpinner /> : renderPage()}
+        </main>
+        
+        {!isLoading && user && (
+          <div className="fixed bottom-24 right-1/2 translate-x-1/2 z-20 sm:right-6 sm:translate-x-0">
+               <motion.button
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => {
+                      if (!user) {
+                          handleGoogleLogin();
+                          return;
+                      }
+                      if (activePage === 'home') setModal('addTransactionMenu');
+                      else if (activePage === 'accounts') setModal('addAccount');
+                      else if (activePage === 'categories') setModal('addCategory');
+                      else setModal('addTransactionMenu');
+                  }}
+                  className="bg-sky-500 text-white rounded-full p-4 shadow-lg hover:bg-sky-600 focus:outline-none focus:ring-4 focus:ring-sky-300"
+                  aria-label="新增項目"
+                >
+                  <Plus className="h-7 w-7" />
+              </motion.button>
+          </div>
+        )}
+        
+        <BottomNav activePage={activePage} setActivePage={setActivePage} />
+        <AnimatePresence>
+            {modal && renderModal()}
+            {itemToDelete && <ConfirmDeleteModal onConfirm={confirmDelete} onCancel={() => setItemToDelete(null)} message={itemToDelete.message} />}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
 }
